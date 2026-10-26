@@ -1,0 +1,5 @@
+name,email,phone,parent_name,birth_date,gender,address,status,code
+Nguyễn Văn A,student1@example.com,0901234567,Nguyễn Văn Bố,2010-01-15,male,123 Đường ABC,active,HV001
+Trần Thị B,student2@example.com,0907654321,Trần Văn Mẹ,2011-03-20,female,456 Đường XYZ,active,HV002
+Lê Văn C,student3@example.com,0912345678,Lê Thị Mẹ,2010-05-10,male,789 Đường DEF,active,HV003
+

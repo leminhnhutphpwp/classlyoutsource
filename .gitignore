@@ -1,0 +1,43 @@
+# ── Monorepo root ──
+node_modules/
+.DS_Store
+*.log
+
+# Env (mỗi app tự quản secret; chỉ .env.example được commit)
+.env
+.env.local
+.env.*.local
+apps/api/.env
+apps/api/.env.production
+apps/app/.env.production
+.user.ini
+apps/api/.env.backup
+# Docker-dev secrets (chỉ .env.docker.example được commit)
+.env.docker
+
+# Dependencies / build output của các app
+apps/*/node_modules/
+apps/api/vendor/
+apps/app/.next/
+apps/app/out/
+apps/marketing/dist/
+
+# SQLite dev database
+apps/api/database/*.sqlite
+apps/api/database/*.sqlite-journal
+
+# IDE
+.idea/
+.vscode/
+*.tsbuildinfo
+
+# Claude Code (giữ settings.json chung, bỏ bản cá nhân)
+.claude/settings.local.json
+
+# Script runtime (logs + tracked PIDs)
+scripts/logs/
+scripts/.pids
+scripts/.env.local
+# Static PHP fallback downloaded by `dev.sh setup` (machine-local, never commit)
+scripts/bin/
+.codegraph

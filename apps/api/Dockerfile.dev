@@ -1,0 +1,31 @@
+# apps/api — Laravel 11 DEV image (KHÔNG dùng cho prod; prod = Dockerfile/FrankenPHP).
+# Ảnh CLI mỏng: PHP + composer + extension. Source được BIND-MOUNT từ host (không bake),
+# nên `composer install` / `migrate` / `serve` chạy ở compose `command`, không ở đây.
+#   docker-compose.dev.yml build từ context ./apps/api với dockerfile này.
+#
+# PHP 8.4 (KHÔNG 8.3): composer.lock đã khoá symfony/* v8.1 yêu cầu php >=8.4.1 — image 8.3
+# làm `composer install` fail (thiếu vendor/autoload → artisan chết). Base Debian (không alpine):
+# install-php-extensions tải extension PREBUILT trên Debian (~1 phút) thay vì compile trên alpine
+# (~18 phút). REDIS dùng predis (pure-PHP, qua REDIS_CLIENT=predis) nên không cần ext phpredis.
+FROM php:8.4-cli
+
+ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+RUN install-php-extensions \
+      pdo_mysql \
+      gd \
+      zip \
+      bcmath \
+      intl \
+      exif \
+      pcntl \
+      opcache \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends git unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# composer nhị phân (copy từ ảnh chính chủ)
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+
+EXPOSE 8000

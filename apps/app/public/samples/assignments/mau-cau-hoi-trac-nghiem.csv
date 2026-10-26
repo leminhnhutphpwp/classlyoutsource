@@ -1,0 +1,6 @@
+Câu hỏi,Phương án A,Phương án B,Phương án C,Phương án D,Đáp án đúng,Điểm
+"Trắc nghiệm là gì?","Một phương pháp đánh giá","Một loại câu hỏi","Cả A và B","Không có đáp án đúng",C,1
+"React là gì?","Một framework","Một thư viện JavaScript","Một ngôn ngữ lập trình","Một database",B,1
+"Next.js được xây dựng trên?","Vue.js","React","Angular","Svelte",B,1
+"TypeScript là gì?","Một framework","Một ngôn ngữ lập trình","Một thư viện","Một database",B,2
+"Component trong React là gì?","Một function hoặc class","Một biến","Một object","Một array",A,1

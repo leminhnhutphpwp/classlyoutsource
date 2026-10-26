@@ -1,0 +1,5 @@
+student_email,class_name,date,status,check_in_time,check_out_time,note
+student1@example.com,Lớp Toán 10A,2025-12-16,present,08:00,10:00,
+student2@example.com,Lớp Toán 10A,2025-12-16,late,08:15,10:00,Đến muộn 15 phút
+student3@example.com,Lớp Toán 10A,2025-12-16,absent,,,Nghỉ có phép
+

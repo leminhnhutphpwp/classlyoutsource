@@ -1,0 +1,5 @@
+name,code,description,is_active,order
+Lớp 10,L10,Cấp độ lớp 10,true,1
+Lớp 11,L11,Cấp độ lớp 11,true,2
+Lớp 12,L12,Cấp độ lớp 12,true,3
+

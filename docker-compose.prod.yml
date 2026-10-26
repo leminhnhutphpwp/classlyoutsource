@@ -1,0 +1,139 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Classly — production stack for a server whose host nginx already holds :80/:443
+#
+# Use this instead of docker-compose.yml + docker-compose.shared.yml when the host
+# runs its own nginx and certbot. Every container stays on the private classly-net
+# network; only the app (and the API, for webhooks) publish on loopback ports that
+# host nginx proxies to:
+#
+#   container → 127.0.0.1:<high port> → host nginx → certbot SSL
+#
+# The Next.js app is a BFF, so browsers only talk to the app. Expose Laravel only
+# for the payment webhook path (/api/sepay/).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+# ─────────────────────────────────────────────────────────────────────────────
+name: classly
+
+services:
+  # ── MySQL riêng của classly (server không có MySQL dùng chung) ──────────────
+  # KHÔNG publish ra host: chỉ các container trong classly-net truy cập được.
+  mysql:
+    image: mysql:8.4
+    container_name: classly-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # KHÔNG đặt --default-authentication-plugin: cờ này đã bị GỠ khỏi MySQL 8.4
+      # (deprecated từ 8.0), server sẽ bỏ chạy với "unknown variable". Trong 8.4
+      # caching_sha2_password vốn đã là mặc định nên không cần khai báo gì thêm.
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?bắt buộc}
+      MYSQL_DATABASE: ${DB_DATABASE:-classly}
+      MYSQL_USER: ${DB_USERNAME:-classly}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?bắt buộc}
+    volumes:
+      - classly-mysql-data:/var/lib/mysql
+    networks: [classly-net]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: classly-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?bắt buộc}", "--appendonly", "yes"]
+    volumes:
+      - classly-redis-data:/data
+    networks: [classly-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── API Laravel (FrankenPHP) ───────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: classly-api:${IMAGE_TAG:-latest}
+    container_name: classly-api
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DB_HOST: classly-mysql
+      REDIS_HOST: classly-redis
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes:
+      - classly-storage:/app/storage/app
+    # Chỉ nghe trên loopback — Internet vào qua nginx, không phơi cổng ra ngoài.
+    ports: ["127.0.0.1:8101:8000"]
+    networks: [classly-net]
+
+  # Worker BẮT BUỘC phải chạy: thiếu nó thì mail, thông báo và TÍNH LƯƠNG treo im lặng.
+  queue:
+    image: classly-api:${IMAGE_TAG:-latest}
+    container_name: classly-queue
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DB_HOST: classly-mysql
+      REDIS_HOST: classly-redis
+      RUN_MIGRATIONS: "false"   # chỉ container api chạy migrate
+    depends_on:
+      api: { condition: service_started }
+    volumes:
+      - classly-storage:/app/storage/app
+    command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=120", "--sleep=3"]
+    # Ghi đè healthcheck kế thừa từ base image FrankenPHP (curl localhost:2019/metrics —
+    # endpoint metrics của Caddy). Container này chạy queue:work, KHÔNG chạy Caddy, nên
+    # healthcheck đó luôn fail và container bị gắn nhãn "unhealthy" dù vẫn xử lý job bình
+    # thường. Trạng thái sai kiểu này làm người vận hành quen bỏ qua cảnh báo thật.
+    # Thay bằng phép kiểm đúng bản chất: tiến trình worker còn sống hay không.
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan queue:work' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [classly-net]
+
+  # ── App Next.js (BFF, đứng ở gốc domain) ───────────────────────────────────
+  app:
+    build:
+      context: ./apps/app
+      dockerfile: Dockerfile
+    image: classly-app:${IMAGE_TAG:-latest}
+    container_name: classly-app
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      NODE_ENV: production
+      # BFF gọi backend qua TÊN SERVICE trong Docker, không phải localhost.
+      BACKEND_URL: http://classly-api:8000
+      API_BASE_URL: http://classly-api:8000
+      NEXT_PUBLIC_SITE_URL: ${APP_PUBLIC_URL:-https://app.example.com}
+    ports: ["127.0.0.1:8102:3000"]
+    networks: [classly-net]
+
+networks:
+  classly-net:
+    name: classly-net
+    driver: bridge
+
+volumes:
+  classly-mysql-data:
+    name: classly-mysql-data
+  classly-redis-data:
+    name: classly-redis-data
+  classly-storage:
+    name: classly-storage

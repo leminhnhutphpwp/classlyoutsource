@@ -1,0 +1,8 @@
+question_type,câu hỏi,A,B,C,D,đáp án đúng,điểm,items,distractors
+single_choice,"Từ nào có cách phát âm khác với các từ còn lại?",cups,books,pens,erasers,A,1,,
+multiple_choice,"Chọn tất cả các danh từ sau:",happiness,quickly,teacher,beauty,"A,C,D",1,,
+short_answer,"Điền dạng đúng của động từ: She ___ (go) to school every day.",,,,,goes,1,,
+true_false_not_given,"The library opens at 9am on Sundays.",,,,,TRUE,1,,
+matching,"Nối mỗi thành phố với quốc gia tương ứng",,,,,,3,"Hà Nội|Việt Nam;;Bangkok|Thái Lan;;Tokyo|Nhật Bản","Hàn Quốc;;Singapore"
+ordering,"Sắp xếp các bước pha trà theo đúng thứ tự",,,,,,3,"Đun nước sôi;;Cho trà vào ấm;;Rót nước vào ấm;;Thêm đường",
+gap_fill,"She {{1}} a doctor. They {{2}} nurses.",,,,,,2,"1|is;;2|are",

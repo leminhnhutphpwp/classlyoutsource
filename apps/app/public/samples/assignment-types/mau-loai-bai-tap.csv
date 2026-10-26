@@ -1,0 +1,5 @@
+name,code,description,is_active,order
+Bài tập về nhà,BT,Ôn tập kiến thức đã học,true,1
+Kiểm tra 15 phút,KT15,Đánh giá nhanh,true,2
+Thi giữa kỳ,THGK,Thi giữa học kỳ,true,3
+

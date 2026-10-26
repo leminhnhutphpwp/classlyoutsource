@@ -1,0 +1,205 @@
+# ─────────────────────────────────────────────────────────────
+# Classly — LOCAL DOCKER DEV stack (NOT production).
+# Runs the whole monorepo in Docker with hot-reload and published host ports.
+#   docker compose -f docker-compose.dev.yml up -d --build
+#   docker compose -f docker-compose.dev.yml ps
+#   docker compose -f docker-compose.dev.yml down        # add -v to wipe MySQL/Redis data
+#
+# THIS IS OPT-IN. The default way to develop Classly is NATIVE, with no containers at all
+# (`bash scripts/dev.sh start`, ServBay + SQLite). Both can run at the same time — the host
+# ports below are deliberately offset from the native stack. See docs/RUNNING-MODES.md.
+#
+# Production is docker-compose.prod.yml, not this file and not docker-compose.yml.
+#
+# REQUIRES .env.docker (gitignored):
+#   cp .env.docker.example .env.docker    # then fill APP_KEY and JWT_SECRET
+#
+# HOST PORTS (offset to avoid the native stack and other projects on this machine):
+#   api 8200:8000 · app 3200:3000 · mysql 3308:3306 · redis 6579:6379
+# Each host port is overridable via env (set in the shell or a project `.env`):
+#   API_DEV_PORT / APP_DEV_PORT / MYSQL_DEV_PORT / REDIS_DEV_PORT
+#   e.g. API_DEV_PORT=8300 APP_DEV_PORT=3300 docker compose -f docker-compose.dev.yml up -d
+# NOTE: the app service's browser-facing URLs (API_BASE_URL, NEXT_PUBLIC_*) follow these vars too.
+#
+# BFF / proxy wiring (the browser only makes same-origin calls; server-side calls use SERVICE NAMES):
+#   app        BACKEND_URL=http://api:8000   (Next route handler → api)
+#
+# Project name scopes every container/network/volume (classly-*) so several projects can share
+# one machine without clashing. Override with STACK_NAME.
+# Do NOT set a fixed `container_name:` on dev services: the project name already namespaces them
+# (Compose auto-names them classly-<service>-1), so a fixed name is both redundant and would break
+# `--scale` and any second deployment using a different STACK_NAME. Internal traffic uses SERVICE
+# NAMES (api/mysql/redis), so container names changing is harmless.
+# (Production docker-compose.yml does use fixed names, because Traefik routers reference them.)
+# ─────────────────────────────────────────────────────────────
+name: ${STACK_NAME:-classly}
+
+networks:
+  classly-net:
+    name: classly-net-dev
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  # node_modules/.next are named volumes so container-built dependencies never mix with the
+  # host's macOS copies (the source is bind-mounted, but these paths are masked over it).
+  app_node_modules:
+  app_next:
+  # vendor is SHARED between api and queue (named, not anonymous): api runs composer install and
+  # writes here, queue (which waits for api to be healthy) reuses it instead of installing twice.
+  api_vendor:
+
+services:
+  # ── API — Laravel 11 (REST /api/v1) ──────────────
+  # Source is bind-mounted; the command installs composer deps if missing, migrates + seeds, then serves.
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    image: ${STACK_NAME:-classly}-api-dev
+    env_file: .env.docker
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+    ports:
+      - "${API_DEV_PORT:-8200}:8000"
+    volumes:
+      - ./apps/api:/app
+      - api_vendor:/app/vendor   # named, shared with queue
+    command: >
+      sh -c "
+        [ ! -f vendor/autoload.php ] && composer install --no-interaction --no-progress;
+        php artisan migrate --force --seed || php artisan migrate --force;
+        exec php artisan serve --host=0.0.0.0 --port=8000 --no-reload
+      "
+    healthcheck:
+      # /up must return 200 — proves the server actually came up, not merely that PHP runs.
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') !== false ? 0 : 1);"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - classly-net
+
+  # ── QUEUE — separate worker (mail/notifications/exports run async) ──
+  # Shares the api image. Do NOT declare `build:` here — two services building the same tag race
+  # each other on image export and fail with "already exists". api builds it; queue just references
+  # it. queue never migrates; that is api's job.
+  queue:
+    image: ${STACK_NAME:-classly}-api-dev
+    env_file: .env.docker
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+    volumes:
+      - ./apps/api:/app
+      - api_vendor:/app/vendor   # named, shared with api (which has finished installing by now)
+    command: >
+      sh -c "
+        [ ! -f vendor/autoload.php ] && composer install --no-interaction --no-progress;
+        exec php artisan queue:work --tries=3 --timeout=120
+      "
+    healthcheck:
+      test: ["CMD", "php", "artisan", "--version"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      api:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - classly-net
+
+  # ── APP — Next.js 15 (BFF). The browser only calls same-origin /api on :3200 ──
+  app:
+    build:
+      context: ./apps/app
+      dockerfile: Dockerfile.dev
+    image: ${STACK_NAME:-classly}-app-dev
+    environment:
+      NODE_ENV: development
+      # HMR over a macOS bind-mount needs polling.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      # BFF: the route handler (server-side) reaches api by SERVICE NAME, not localhost.
+      BACKEND_URL: http://api:8000
+      # API_BASE_URL only feeds the CSP connect-src (evaluated by the browser) → point it at the
+      # api port PUBLISHED on the host.
+      API_BASE_URL: http://localhost:${API_DEV_PORT:-8200}
+      NEXT_PUBLIC_SITE_URL: http://localhost:${APP_DEV_PORT:-3200}
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_DEV_PORT:-8200}
+    ports:
+      - "${APP_DEV_PORT:-3200}:3000"
+    volumes:
+      - ./apps/app:/app
+      - app_node_modules:/app/node_modules
+      - app_next:/app/.next
+    command: >
+      sh -c "
+        [ ! -d node_modules/next ] && npm install;
+        exec npm run dev -- -H 0.0.0.0 -p 3000
+      "
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - classly-net
+
+  # ── MySQL 8 (mirrors prod; the native-local stack uses SQLite instead) ──
+  mysql:
+    image: mysql:8.0
+    # IMPORTANT: credentials come FROM env_file (.env.docker) — do NOT use ${..} here.
+    # Compose's ${VAR} substitution does NOT read env_file (only the project .env and the shell), so
+    # ${DB_PASSWORD} would fall back to its default and MySQL would create user 'classly' with a
+    # DIFFERENT password than the one api uses (from .env.docker) → api fails with "Access denied".
+    # Set MYSQL_* directly in .env.docker so the mysql container AND api share ONE source of truth.
+    # (MySQL only creates the user on first init — after changing it you must `down -v` to drop
+    # the mysql_data volume.)
+    env_file: .env.docker
+    ports:
+      - "${MYSQL_DEV_PORT:-3308}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      # read $MYSQL_ROOT_PASSWORD inside the container ($$ stops Compose from consuming the variable).
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - classly-net
+
+  # ── Redis 7 (cache/session/queue driver) ──
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_DEV_PORT:-6579}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - classly-net

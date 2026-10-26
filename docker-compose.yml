@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────
+# Classly — compose RIÊNG của project (production/staging trên server).
+# Mọi tài nguyên đặt tên theo project (classly-*) để nhiều project
+# chạy chung 1 server không đụng nhau. Service DÙNG CHUNG (mysql, redis,
+# proxy) nằm ở docker-compose.shared.yml, kết nối qua network `shared`.
+#
+#   docker compose up -d                 # chạy 3 service của project
+#   docker compose --profile web up -d   # kèm cổng HTTP publish ra host
+# ─────────────────────────────────────────────────────────────
+name: classly
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: classly-api:${IMAGE_TAG:-latest}
+    container_name: classly-api
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      RUN_MIGRATIONS: "true"
+      DB_CONNECTION: mysql
+      DB_HOST: ${DB_HOST:-mysql}
+      DB_PORT: ${DB_PORT:-3306}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
+    volumes:
+      - classly-storage:/app/storage
+    networks: [classly-net, shared]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=shared
+      - traefik.http.routers.classly-api.rule=Host(`${API_HOST:-api.classly.io.vn}`)
+      - traefik.http.routers.classly-api.entrypoints=websecure
+      - traefik.http.routers.classly-api.tls.certresolver=le
+      - traefik.http.services.classly-api.loadbalancer.server.port=8000
+
+  queue:
+    image: classly-api:${IMAGE_TAG:-latest}
+    container_name: classly-queue
+    restart: unless-stopped
+    depends_on: [api]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: production
+      RUN_MIGRATIONS: "false"
+      DB_CONNECTION: mysql
+      DB_HOST: ${DB_HOST:-mysql}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      QUEUE_CONNECTION: redis
+    entrypoint: ["php", "artisan", "queue:work", "--tries=3", "--timeout=120"]
+    volumes:
+      - classly-storage:/app/storage
+    networks: [classly-net, shared]
+
+  app:
+    build:
+      context: ./apps/app
+      dockerfile: Dockerfile
+    image: classly-app:${IMAGE_TAG:-latest}
+    container_name: classly-app
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      NODE_ENV: production
+      # BFF gọi backend qua TÊN SERVICE trong Docker (không phải localhost)
+      BACKEND_URL: http://classly-api:8000
+      API_BASE_URL: http://classly-api:8000
+      NEXT_PUBLIC_SITE_URL: ${APP_PUBLIC_URL:-https://app.classly.io.vn}
+      NEXT_PUBLIC_API_BASE_URL: ${API_PUBLIC_URL:-https://api.classly.io.vn}
+    networks: [classly-net, shared]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=shared
+      - traefik.http.routers.classly-app.rule=Host(`${APP_HOST:-app.classly.io.vn}`)
+      - traefik.http.routers.classly-app.entrypoints=websecure
+      - traefik.http.routers.classly-app.tls.certresolver=le
+      - traefik.http.services.classly-app.loadbalancer.server.port=3000
+
+networks:
+  # Network RIÊNG project (tự tạo, tên classly-net)
+  classly-net:
+    name: classly-net
+    driver: bridge
+  # Network DÙNG CHUNG (tạo bởi docker-compose.shared.yml). external = không tự tạo.
+  shared:
+    external: true
+    name: shared
+
+volumes:
+  classly-storage:
+    name: classly-storage

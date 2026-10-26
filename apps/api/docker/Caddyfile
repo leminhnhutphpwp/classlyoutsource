@@ -1,0 +1,16 @@
+{
+	frankenphp
+	# Không auto-HTTPS ở container; TLS do reverse-proxy dùng chung xử lý.
+	auto_https off
+}
+
+:8000 {
+	root * /app/public
+	encode gzip
+
+	# Cache tài nguyên tĩnh
+	@static path *.css *.js *.png *.jpg *.jpeg *.gif *.svg *.woff *.woff2 *.ico
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	php_server
+}

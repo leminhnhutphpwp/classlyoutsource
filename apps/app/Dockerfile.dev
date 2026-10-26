@@ -1,0 +1,12 @@
+# apps/app — Next.js 15 DEV image (prod = Dockerfile/standalone). Source bind-mount;
+# `npm install` + `npm run dev` chạy ở compose `command`. node_modules/.next là named
+# volume để deps build trong Alpine không lẫn với bản macOS của host.
+FROM node:20-alpine
+
+WORKDIR /app
+
+# HMR qua bind-mount macOS cần polling (webpack fallback path) — cũng set lại ở compose env.
+ENV WATCHPACK_POLLING=true \
+    CHOKIDAR_USEPOLLING=true
+
+EXPOSE 3000

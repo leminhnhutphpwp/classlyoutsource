@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://classly.io.vn/sitemap.xml
+
+# Security
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+Disallow: /auth/

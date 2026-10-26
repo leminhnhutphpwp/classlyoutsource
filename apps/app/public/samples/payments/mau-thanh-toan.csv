@@ -1,0 +1,4 @@
+student_email,payment_request_id,amount,payment_method,payment_date,status,transaction_id,note
+student1@example.com,1,500000,cash,2025-12-16,paid,TXN001,Thanh toán học phí tháng 12
+student2@example.com,1,500000,bank,2025-12-16,paid,TXN002,
+

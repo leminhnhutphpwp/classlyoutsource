@@ -1,0 +1,23 @@
+{
+  "name": "classly",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Classly monorepo — 1 API (Laravel) + 1 app (Next.js).",
+  "scripts": {
+    "setup": "bash scripts/dev.sh setup",
+    "dev": "bash scripts/dev.sh start",
+    "start": "bash scripts/dev.sh start",
+    "stop": "bash scripts/dev.sh stop",
+    "restart": "bash scripts/dev.sh restart",
+    "status": "bash scripts/dev.sh status",
+    "logs": "bash scripts/dev.sh logs",
+    "verify": "bash scripts/dev.sh verify",
+    "build": "bash scripts/dev.sh build all",
+    "build:app": "bash scripts/dev.sh build app",
+    "migrate": "bash scripts/migrate.sh",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

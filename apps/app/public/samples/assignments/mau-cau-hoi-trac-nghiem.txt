@@ -1,0 +1,15 @@
+HƯỚNG DẪN TẠO FILE DOCX
+
+File DOCX hiện chưa được hỗ trợ parse tự động trong frontend.
+Vui lòng sử dụng file CSV hoặc Excel (.xlsx) để nhập câu hỏi.
+
+Cấu trúc file CSV/Excel:
+- Cột 1: Câu hỏi (hoặc "Nội dung", "Title", "Question")
+- Cột 2-5: Phương án A, B, C, D (hoặc "Phương án A", "Option A", "A", "B", "C", "D")
+- Cột 6: Đáp án đúng (A, B, C, hoặc D)
+- Cột 7: Điểm (số, mặc định là 1)
+
+Ví dụ:
+Câu hỏi,Phương án A,Phương án B,Phương án C,Phương án D,Đáp án đúng,Điểm
+"Trắc nghiệm là gì?","Một phương pháp đánh giá","Một loại câu hỏi","Cả A và B","Không có đáp án đúng",C,1
+

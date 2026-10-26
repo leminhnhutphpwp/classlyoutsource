@@ -1,0 +1,6 @@
+name,code,description,is_active,order
+Điểm miệng,DM,Điểm kiểm tra miệng,true,1
+Điểm 15 phút,D15,Điểm kiểm tra 15 phút,true,2
+Điểm 1 tiết,D1T,Điểm kiểm tra 1 tiết,true,3
+Điểm thi học kỳ,DTHK,Điểm thi học kỳ,true,4
+
